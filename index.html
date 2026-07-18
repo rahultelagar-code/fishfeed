@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Fish Feeder</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+
+        :root {
+            --bg-main: #141419; --card-bg: #1c1c24; --text-main: #ffffff;
+            --text-muted: #6b6b7b; --neon-pink: #ff3366; --neon-cyan: #00e5ff;
+            --neon-orange: #ff9900; --neon-purple: #9d4edd;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+        
+        body { 
+            color: var(--text-main); display: flex; flex-direction: column; align-items: center; padding: 2rem 1rem; overflow-x: hidden; min-height: 100vh;
+        }
+
+        /* LIVE VIDEO BACKGROUND CSS */
+        .bg-video {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            min-width: 100%;
+            min-height: 100%;
+            width: auto;
+            height: auto;
+            z-index: -2;
+            transform: translateX(-50%) translateY(-50%);
+            object-fit: cover;
+        }
+
+        /* DARK OVERLAY SO TEXT IS READABLE */
+        .bg-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(rgba(20, 20, 25, 0.65), rgba(20, 20, 25, 0.95));
+            z-index: -1;
+        }
+
+        .dashboard { display: flex; flex-direction: column; gap: 1.5rem; width: 100%; max-width: 400px; z-index: 1; }
+        .card { background-color: rgba(28, 28, 36, 0.7); backdrop-filter: blur(12px); border-radius: 24px; padding: 1.5rem; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid #2a2a35; }
+        .card h2 { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1rem; border-bottom: 1px solid #2a2a35; padding-bottom: 5px;}
+
+        /* Power & History Status */
+        .info-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-weight: 600; }
+        .power-badge { padding: 4px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: 800; letter-spacing: 1px; }
+        .power-on { background: rgba(0, 229, 255, 0.2); color: var(--neon-cyan); border: 1px solid var(--neon-cyan); box-shadow: 0 0 10px rgba(0, 229, 255, 0.3); }
+        .power-off { background: rgba(255, 51, 51, 0.2); color: #ff3333; border: 1px solid #ff3333; box-shadow: 0 0 10px rgba(255, 51, 51, 0.3); }
+        
+        /* Ring Animation */
+        .ring { width: 100px; height: 100px; border-radius: 50%; border: 6px solid #2a2a35; display: flex; justify-content: center; align-items: center; margin: 1rem auto; transition: 0.3s; }
+        .ring.active { border-color: var(--neon-pink); box-shadow: 0 0 20px rgba(255,51,102,0.4); animation: pulse 1s infinite; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+
+        /* Sliders & Inputs */
+        .val-display { font-size: 2rem; font-weight: 800; color: var(--neon-pink); }
+        input[type=range] { -webkit-appearance: none; width: 100%; background: #2a2a35; height: 8px; border-radius: 4px; margin-top: 10px; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 20px; width: 20px; border-radius: 50%; background: var(--neon-pink); cursor: pointer; }
+        input[type=time] { background: rgba(0,0,0,0.2); color: white; border: 1px solid #2a2a35; padding: 10px; border-radius: 8px; font-size: 1.2rem; width: 100%; text-align: center; margin-bottom: 10px;}
+        input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(1); cursor: pointer; }
+
+        /* Buttons */
+        .btn { background: #2a2a35; color: white; border: none; padding: 1rem; width: 100%; border-radius: 12px; font-weight: 800; cursor: pointer; margin-top: 10px; transition: 0.2s; }
+        .btn-pink { background: linear-gradient(90deg, var(--neon-purple), var(--neon-pink)); }
+        .btn-cyan { background: linear-gradient(90deg, #0077b6, var(--neon-cyan)); }
+        .btn:hover { transform: translateY(-2px); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+
+    <video autoplay muted loop playsinline class="bg-video">
+        <source src="https://cdn.pixabay.com/video/2021/08/11/84687-587845353_tiny.mp4" type="video/mp4">
+    </video>
+    
+    <!-- THE DARK OVERLAY -->
+    <div class="bg-overlay"></div>
+
+    <div class="dashboard">
+        
+        <div class="card">
+            <h2>System Info</h2>
+            
+            <div class="info-row">
+                <span style="color: var(--text-muted)">Wi-Fi Status:</span>
+                <span id="wifiBadge" class="power-badge power-off">DISCONNECTED</span>
+            </div>
+
+            <div class="info-row">
+                <span style="color: var(--text-muted)">Last Fed:</span>
+                <span id="lastFedText" style="color: var(--neon-orange)">--:--</span>
+            </div>
+            
+            <div class="ring" id="statusRing">
+                <span id="statusText" style="font-weight: 800; color: var(--text-muted)">READY</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Manual Drop</h2>
+            <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                <span class="val-display" id="sliderValDisplay">2.0</span>
+                <span style="color: var(--text-muted)">Seconds (Max 3)</span>
+            </div>
+            <input type="range" id="portionSlider" min="0.5" max="3.0" step="0.5" value="2.0">
+            <button id="feedBtn" class="btn btn-pink">DISPENSE FOOD</button>
+        </div>
+
+        <div class="card">
+            <h2>Auto Schedule</h2>
+            <input type="time" id="scheduleTime">
+            <button id="saveTimeBtn" class="btn btn-cyan">SET ALARM</button>
+            <div id="saveMsg" style="color: var(--neon-cyan); font-size: 0.8rem; text-align: center; margin-top: 10px; display: none;">Schedule Saved!</div>
+        </div>
+
+        <div class="card">
+            <h2>System Settings</h2>
+            <button id="resetBtn" class="btn" style="background: linear-gradient(90deg, #ff0044, #990000);">RESET SYSTEM</button>
+            <div id="resetMsg" style="color: var(--neon-pink); font-size: 0.8rem; text-align: center; margin-top: 10px; display: none;">System Reset to Default!</div>
+        </div>
+
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, set, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        // Your exact Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCPMIyOoSmZxVzK8GgNAB8_8W5mQl4_k88",
+            authDomain: "fish-feed-59f08.firebaseapp.com",
+            databaseURL: "https://fish-feed-59f08-default-rtdb.firebaseio.com", 
+            projectId: "fish-feed-59f08",
+            storageBucket: "fish-feed-59f08.firebasestorage.app",
+            messagingSenderId: "409504159540",
+            appId: "1:409504159540:web:f059be34f9856820693761",
+            measurementId: "G-PWSELJHVJD"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        // UI References
+        const wifiBadge = document.getElementById("wifiBadge");
+        const lastFedText = document.getElementById("lastFedText");
+        const statusRing = document.getElementById("statusRing");
+        const statusText = document.getElementById("statusText");
+        const portionSlider = document.getElementById("portionSlider");
+        const sliderValDisplay = document.getElementById("sliderValDisplay");
+        const feedBtn = document.getElementById("feedBtn");
+        const scheduleTime = document.getElementById("scheduleTime");
+        const saveTimeBtn = document.getElementById("saveTimeBtn");
+        const resetBtn = document.getElementById("resetBtn");
+        const resetMsg = document.getElementById("resetMsg");
+
+        // Firebase Paths
+        const connectedRef = ref(db, ".info/connected");
+        const triggerRef = ref(db, 'feeder/feed_trigger');
+        const durationRef = ref(db, 'feeder/feed_duration');
+        const lastFedRef = ref(db, 'feeder/last_fed');
+        const hourRef = ref(db, 'feeder/schedule/hour');
+        const minRef = ref(db, 'feeder/schedule/minute');
+
+        // Wi-Fi Status Logic (Detects connection to Firebase)
+        onValue(connectedRef, (snap) => {
+            if (snap.val() === true) {
+                wifiBadge.className = "power-badge power-on";
+                wifiBadge.innerText = "CONNECTED";
+            } else {
+                wifiBadge.className = "power-badge power-off";
+                wifiBadge.innerText = "DISCONNECTED";
+            }
+        });
+
+        // Load Last Fed Time
+        onValue(lastFedRef, (snap) => {
+            if (snap.val()) lastFedText.innerText = snap.val();
+        });
+
+        // Load existing schedule
+        get(hourRef).then(snapH => {
+            get(minRef).then(snapM => {
+                if (snapH.exists() && snapM.exists()) {
+                    let h = String(snapH.val()).padStart(2, '0');
+                    let m = String(snapM.val()).padStart(2, '0');
+                    scheduleTime.value = `${h}:${m}`;
+                }
+            });
+        });
+
+        // Update Slider Text dynamically
+        portionSlider.addEventListener("input", e => sliderValDisplay.innerText = Number(e.target.value).toFixed(1));
+
+        // Feeder Animation Logic
+        onValue(triggerRef, snap => {
+            if (snap.val() === true) {
+                statusRing.className = "ring active";
+                statusText.innerText = "FEEDING";
+                statusText.style.color = "var(--neon-pink)";
+                feedBtn.disabled = true;
+            } else {
+                statusRing.className = "ring";
+                statusText.innerText = "READY";
+                statusText.style.color = "var(--text-muted)";
+                feedBtn.disabled = false;
+            }
+        });
+
+        // Manual Dispense Button
+        feedBtn.addEventListener("click", () => {
+            const durationMs = parseFloat(portionSlider.value) * 1000;
+            
+            // 1. Write the desired duration to Firebase
+            set(durationRef, durationMs).then(() => {
+                // 2. Trigger the feeding animation and hardware
+                set(triggerRef, true);
+                
+                // 3. FRONTEND AUTO-RESET: Automatically turn off the trigger 
+                // after the selected time finishes. This guarantees the UI resets!
+                setTimeout(() => {
+                    set(triggerRef, false);
+                }, durationMs + 500); // 500ms buffer to ensure hardware catches it
+            });
+        });
+
+        // Save Auto Schedule
+        saveTimeBtn.addEventListener("click", () => {
+            if (!scheduleTime.value) return;
+            const [h, m] = scheduleTime.value.split(':');
+            set(hourRef, parseInt(h));
+            set(minRef, parseInt(m)).then(() => {
+                const msg = document.getElementById("saveMsg");
+                msg.style.display = "block";
+                setTimeout(() => msg.style.display = "none", 3000);
+            });
+        });
+
+        // Reset System Button Logic
+        resetBtn.addEventListener("click", () => {
+            // 1. Reset Firebase values
+            set(triggerRef, false);
+            set(durationRef, 2000);
+            set(lastFedRef, "--:--");
+            set(hourRef, null); // Deletes the scheduled hour
+            set(minRef, null);  // Deletes the scheduled minute
+            
+            // 2. Reset Dashboard UI inputs
+            portionSlider.value = 2.0;
+            sliderValDisplay.innerText = "2.0";
+            scheduleTime.value = "";
+            
+            // 3. Show confirmation message
+            resetMsg.style.display = "block";
+            setTimeout(() => resetMsg.style.display = "none", 3000);
+        });
+    </script>
+</body>
+</html>
