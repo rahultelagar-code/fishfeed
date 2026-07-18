@@ -80,11 +80,16 @@
         <source src="https://cdn.pixabay.com/video/2021/08/11/84687-587845353_tiny.mp4" type="video/mp4">
     </video>
     
-    <!-- THE DARK OVERLAY -->
     <div class="bg-overlay"></div>
 
     <div class="dashboard">
         
+        <!-- TIME DISPLAY -->
+        <div class="card" style="text-align: center;">
+            <h2 style="margin-bottom: 0.2rem;">Current Time</h2>
+            <div id="clockDisplay" style="font-size: 2rem; font-weight: 800; color: var(--neon-cyan);">00:00:00</div>
+        </div>
+
         <div class="card">
             <h2>System Info</h2>
             
@@ -95,7 +100,7 @@
 
             <div class="info-row">
                 <span style="color: var(--text-muted)">Last Fed:</span>
-                <span id="lastFedText" style="color: var(--neon-orange)">--:--</span>
+                <span id="lastFedText" style="color: var(--neon-orange)">--/--/-- --:--</span>
             </div>
             
             <div class="ring" id="statusRing">
@@ -132,7 +137,6 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getDatabase, ref, set, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-        // Your exact Firebase configuration
         const firebaseConfig = {
             apiKey: "AIzaSyCPMIyOoSmZxVzK8GgNAB8_8W5mQl4_k88",
             authDomain: "fish-feed-59f08.firebaseapp.com",
@@ -147,6 +151,11 @@
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
+        // CLOCK LOGIC
+        setInterval(() => {
+            document.getElementById('clockDisplay').innerText = new Date().toLocaleTimeString();
+        }, 1000);
+
         // UI References
         const wifiBadge = document.getElementById("wifiBadge");
         const lastFedText = document.getElementById("lastFedText");
@@ -160,7 +169,6 @@
         const resetBtn = document.getElementById("resetBtn");
         const resetMsg = document.getElementById("resetMsg");
 
-        // Firebase Paths
         const connectedRef = ref(db, ".info/connected");
         const triggerRef = ref(db, 'feeder/feed_trigger');
         const durationRef = ref(db, 'feeder/feed_duration');
@@ -168,7 +176,6 @@
         const hourRef = ref(db, 'feeder/schedule/hour');
         const minRef = ref(db, 'feeder/schedule/minute');
 
-        // Wi-Fi Status Logic (Detects connection to Firebase)
         onValue(connectedRef, (snap) => {
             if (snap.val() === true) {
                 wifiBadge.className = "power-badge power-on";
@@ -179,26 +186,23 @@
             }
         });
 
-        // Load Last Fed Time
         onValue(lastFedRef, (snap) => {
-            if (snap.val()) lastFedText.innerText = snap.val();
+            if (snap.val()) {
+                const dateStr = new Date().toLocaleDateString();
+                lastFedText.innerText = `${dateStr} ${snap.val()}`;
+            }
         });
 
-        // Load existing schedule
         get(hourRef).then(snapH => {
             get(minRef).then(snapM => {
                 if (snapH.exists() && snapM.exists()) {
-                    let h = String(snapH.val()).padStart(2, '0');
-                    let m = String(snapM.val()).padStart(2, '0');
-                    scheduleTime.value = `${h}:${m}`;
+                    scheduleTime.value = `${String(snapH.val()).padStart(2, '0')}:${String(snapM.val()).padStart(2, '0')}`;
                 }
             });
         });
 
-        // Update Slider Text dynamically
         portionSlider.addEventListener("input", e => sliderValDisplay.innerText = Number(e.target.value).toFixed(1));
 
-        // Feeder Animation Logic
         onValue(triggerRef, snap => {
             if (snap.val() === true) {
                 statusRing.className = "ring active";
@@ -213,24 +217,14 @@
             }
         });
 
-        // Manual Dispense Button
         feedBtn.addEventListener("click", () => {
             const durationMs = parseFloat(portionSlider.value) * 1000;
-            
-            // 1. Write the desired duration to Firebase
             set(durationRef, durationMs).then(() => {
-                // 2. Trigger the feeding animation and hardware
                 set(triggerRef, true);
-                
-                // 3. FRONTEND AUTO-RESET: Automatically turn off the trigger 
-                // after the selected time finishes. This guarantees the UI resets!
-                setTimeout(() => {
-                    set(triggerRef, false);
-                }, durationMs + 500); // 500ms buffer to ensure hardware catches it
+                setTimeout(() => set(triggerRef, false), durationMs + 500);
             });
         });
 
-        // Save Auto Schedule
         saveTimeBtn.addEventListener("click", () => {
             if (!scheduleTime.value) return;
             const [h, m] = scheduleTime.value.split(':');
@@ -242,21 +236,15 @@
             });
         });
 
-        // Reset System Button Logic
         resetBtn.addEventListener("click", () => {
-            // 1. Reset Firebase values
             set(triggerRef, false);
             set(durationRef, 2000);
             set(lastFedRef, "--:--");
-            set(hourRef, null); // Deletes the scheduled hour
-            set(minRef, null);  // Deletes the scheduled minute
-            
-            // 2. Reset Dashboard UI inputs
+            set(hourRef, null);
+            set(minRef, null);
             portionSlider.value = 2.0;
             sliderValDisplay.innerText = "2.0";
             scheduleTime.value = "";
-            
-            // 3. Show confirmation message
             resetMsg.style.display = "block";
             setTimeout(() => resetMsg.style.display = "none", 3000);
         });
